@@ -608,7 +608,7 @@ const TruckOptimizer = () => {
       truckBreakdown.push(truckInfo);
     });
 
-    // Calculate remaining requirements
+    // Calculate remaining requirements (before auto-calculation)
     const remainingBoxCount = remainingBoxes.reduce((sum, box) => sum + box.remaining, 0);
     const remainingBoxVolume = remainingBoxes.reduce((total, box) => {
       return total + (box.volume * box.remaining);
@@ -625,11 +625,75 @@ const TruckOptimizer = () => {
 
       trucksWithEfficiency.sort((a, b) => a.costPerCubicFoot - b.costPerCubicFoot);
       const bestTruck = trucksWithEfficiency[0];
-      const trucksNeeded = Math.ceil(remainingBoxVolume / bestTruck.volume);
+      
+      // Calculate how many boxes can actually fit in one truck (dimensional fitting)
+      let boxesPerTruck = 0;
+      for (let box of remainingBoxes) {
+        if (box.remaining > 0) {
+          // Check if box can physically fit in truck dimensions
+          const canFitDimensions = (
+            box.length <= bestTruck.length && 
+            box.width <= bestTruck.width && 
+            box.height <= bestTruck.height
+          );
+          
+          if (canFitDimensions) {
+            // Calculate how many of this box type can fit per truck
+            const boxesPerLength = Math.floor(bestTruck.length / box.length);
+            const boxesPerWidth = Math.floor(bestTruck.width / box.width);
+            const boxesPerHeight = Math.floor(bestTruck.height / box.height);
+            
+            boxesPerTruck += (boxesPerLength * boxesPerWidth * boxesPerHeight);
+          }
+        }
+      }
+      
+      // Calculate trucks needed based on actual box fitting, not just volume
+      const trucksNeeded = Math.max(1, Math.ceil(remainingBoxCount / Math.max(1, boxesPerTruck)));
       const additionalCost = trucksNeeded * bestTruck.cost;
       
       totalCost += additionalCost;
       usedVolume += trucksNeeded * bestTruck.volume;
+
+      // Calculate actual box distribution for auto-calculated trucks
+      let autoBoxDistribution = [];
+      let tempRemainingBoxes = [...remainingBoxes];
+      
+      for (let truckIndex = 0; truckIndex < trucksNeeded; truckIndex++) {
+        let currentTruckBoxes = [];
+        let currentTruckVolume = bestTruck.volume;
+        
+        for (let box of tempRemainingBoxes) {
+          if (box.remaining > 0) {
+            const canFitDimensions = (
+              box.length <= bestTruck.length && 
+              box.width <= bestTruck.width && 
+              box.height <= bestTruck.height
+            );
+            
+            if (canFitDimensions) {
+              const boxesPerLength = Math.floor(bestTruck.length / box.length);
+              const boxesPerWidth = Math.floor(bestTruck.width / box.width);
+              const boxesPerHeight = Math.floor(bestTruck.height / box.height);
+              const maxBoxesByDimension = boxesPerLength * boxesPerWidth * boxesPerHeight;
+              
+              const canFitByVolume = Math.min(box.remaining, Math.floor(currentTruckVolume / box.volume));
+              const actualBoxesFit = Math.min(maxBoxesByDimension, canFitByVolume);
+              
+              if (actualBoxesFit > 0) {
+                currentTruckBoxes.push({
+                  name: box.name,
+                  quantity: actualBoxesFit,
+                  volume: actualBoxesFit * box.volume
+                });
+                box.remaining -= actualBoxesFit;
+                currentTruckVolume -= actualBoxesFit * box.volume;
+              }
+            }
+          }
+        }
+        autoBoxDistribution.push(currentTruckBoxes);
+      }
 
       autoCalculateResults = {
         truckType: bestTruck.name,
@@ -637,28 +701,40 @@ const TruckOptimizer = () => {
         trucksRequired: trucksNeeded,
         cost: additionalCost,
         volume: trucksNeeded * bestTruck.volume,
-        boxesForRemaining: remainingBoxCount
+        boxesForRemaining: remainingBoxCount,
+        boxesPerTruck: autoBoxDistribution,
+        totalBoxesFitted: remainingBoxCount - tempRemainingBoxes.reduce((sum, box) => sum + box.remaining, 0),
+        efficiency: bestTruck.volume > 0 ? (((remainingBoxCount - tempRemainingBoxes.reduce((sum, box) => sum + box.remaining, 0)) * boxesInFeet[0]?.volume || 0) / (trucksNeeded * bestTruck.volume) * 100).toFixed(1) : '0.0'
       };
 
       distribution.push(autoCalculateResults);
+      
+      // Update remaining boxes count for the final results
+      remainingBoxes = tempRemainingBoxes;
     }
 
+    // Calculate final remaining requirements (after auto-calculation)
+    const finalRemainingBoxCount = remainingBoxes.reduce((sum, box) => sum + box.remaining, 0);
+    const finalRemainingBoxVolume = remainingBoxes.reduce((total, box) => {
+      return total + (box.volume * box.remaining);
+    }, 0);
+
     // Calculate decision metrics
-    const totalShippedBoxes = totalBoxRequirements - remainingBoxCount;
+    const totalShippedBoxes = totalBoxRequirements - finalRemainingBoxCount;
     const utilizationRate = usedVolume > 0 ? (totalBoxVolume / usedVolume) * 100 : 0;
     const costEfficiency = usedVolume > 0 ? totalCost / usedVolume : 0;
     const shippingCompleteness = totalBoxRequirements > 0 ? (totalShippedBoxes / totalBoxRequirements) * 100 : 0;
 
     // Generate addon truck recommendations for remaining boxes
     const addonRecommendations = [];
-    if (remainingBoxCount > 0) {
+    if (finalRemainingBoxCount > 0) {
       const availableAddonTrucks = [...predefinedTrucks, ...autoCalculateTrucks].map(truck => {
-        const trucksNeeded = Math.ceil(remainingBoxVolume / truck.volume);
+        const trucksNeeded = Math.ceil(finalRemainingBoxVolume / truck.volume);
         return {
           ...truck,
           trucksNeeded: trucksNeeded,
           totalCost: trucksNeeded * truck.cost,
-          costPerBox: (trucksNeeded * truck.cost) / remainingBoxCount
+          costPerBox: (trucksNeeded * truck.cost) / finalRemainingBoxCount
         };
       }).sort((a, b) => a.costPerBox - b.costPerBox);
 
@@ -694,8 +770,8 @@ const TruckOptimizer = () => {
       totalBoxVolume: totalBoxVolume,
       usedVolume: usedVolume,
       remainingBoxes: remainingBoxes,
-      remainingBoxCount: remainingBoxCount,
-      remainingBoxVolume: remainingBoxVolume,
+      remainingBoxCount: finalRemainingBoxCount,
+      remainingBoxVolume: finalRemainingBoxVolume,
       addonRecommendations: addonRecommendations,
       costEfficiency: costEfficiency,
       decisionMetrics: {
@@ -1535,3 +1611,4 @@ const TruckOptimizer = () => {
 };
 
 export default TruckOptimizer;
+
