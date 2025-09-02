@@ -1,8 +1,62 @@
-# Getting Started with Create React App
+# Truck Optimizer
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+A React-based truck optimization application that helps with logistics and route planning.
 
-## Available Scripts
+## 🚀 Live Demo
+
+Deploy this app to Vercel by connecting your GitHub repository.
+
+## 🛠️ Tech Stack
+
+- React 19.1.1
+- Bootstrap 5.3.8
+- React Bootstrap 2.10.10
+
+## 📦 Installation
+
+1. Clone the repository:
+```bash
+git clone https://github.com/jeetshorey123/logistic.git
+cd logistic
+```
+
+2. Install dependencies:
+```bash
+npm install
+```
+
+3. Start the development server:
+```bash
+npm start
+```
+
+The app will open at [http://localhost:3000](http://localhost:3000).
+
+## 🏗️ Build
+
+To create a production build:
+
+```bash
+npm run build
+```
+
+The build folder will contain the optimized production files.
+
+## 🚀 Deployment
+
+### Deploy to Vercel
+
+1. Push your code to GitHub
+2. Connect your GitHub repository to Vercel
+3. Vercel will automatically detect this as a React app and deploy it
+
+The project includes a `vercel.json` configuration file for optimal deployment.
+
+### Manual Deployment
+
+You can also deploy the build folder to any static hosting service.
+
+## 📝 Available Scripts
 
 In the project directory, you can run:
 
